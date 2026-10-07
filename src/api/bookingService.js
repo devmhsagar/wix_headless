@@ -207,12 +207,41 @@ export async function fetchServiceTimeSlots(serviceId, daysAhead = 45) {
 }
 
 /**
+ * Verifies real availability and available resources for a specific slot using Wix Time Slots V2 API.
+ * @param {string} serviceId
+ * @param {string} localStartDate
+ * @param {string} localEndDate
+ * @param {object} [location]
+ * @returns {Promise<object|null>}
+ */
+export async function getSlotVerification(serviceId, localStartDate, localEndDate, location) {
+  if (!serviceId || !localStartDate || !localEndDate) return null;
+  const client = getWixClient();
+  try {
+    const loc = location || { locationType: 'BUSINESS' };
+    const res = await client.availabilityTimeSlots.getAvailabilityTimeSlot(
+      serviceId,
+      localStartDate,
+      localEndDate,
+      'Asia/Dhaka',
+      loc,
+      {}
+    );
+    return res;
+  } catch (err) {
+    console.warn('[Wix Bookings] getAvailabilityTimeSlot notice:', err.message);
+    return null;
+  }
+}
+
+/**
  * Books an available service time slot using Wix Bookings API.
  * @param {object} params
  * @param {object} params.service
  * @param {object} [params.slot]
  * @param {object} params.contactDetails
- * @returns {Promise<{ success: boolean, bookingId?: string, status?: string, message?: string }>}
+ * @param {number} [params.numberOfParticipants=1]
+ * @returns {Promise<{ success: boolean, bookingId?: string, status?: string, message: string, booking?: object, errorCode?: string }>}
  */
 export async function createServiceBooking({ service, slot, contactDetails, numberOfParticipants = 1 }) {
   if (!service || !service.id) {
@@ -221,20 +250,42 @@ export async function createServiceBooking({ service, slot, contactDetails, numb
 
   const client = getWixClient();
 
-  console.log(`[Wix Bookings] Initiating booking for "${service.name}"...`);
+  console.log(`[Wix Bookings] Initiating real booking for "${service.name}"...`);
 
   // Construct bookedEntity depending on slot or schedule
   const bookedEntity = {};
 
   if (slot && slot.localStartDate) {
-    bookedEntity.slot = {
+    // 1. Verify resource availability immediately before booking
+    const verification = await getSlotVerification(service.id, slot.localStartDate, slot.localEndDate, slot.location);
+    const availableResources = verification?.timeSlot?.availableResources || [];
+    
+    const slotPayload = {
       serviceId: service.id,
       scheduleId: slot.scheduleId || service.scheduleId,
       location: { locationType: 'OWNER_BUSINESS' },
       startDate: new Date(slot.localStartDate).toISOString(),
       endDate: new Date(slot.localEndDate).toISOString(),
     };
+
+    // If specific resources exist for this slot, bind them to avoid resource configuration conflicts
+    if (availableResources.length > 0 && availableResources[0]?.resources?.length > 0) {
+      const primaryRes = availableResources[0].resources[0];
+      slotPayload.resource = {
+        id: primaryRes._id,
+        name: primaryRes.name,
+      };
+      slotPayload.resourceSelections = [
+        {
+          resourceTypeId: availableResources[0].resourceTypeId,
+          selectionMethod: 'SPECIFIC_RESOURCE',
+        },
+      ];
+    }
+
+    bookedEntity.slot = slotPayload;
   } else if (service.scheduleId) {
+    // Course or class service: bind by schedule directly
     bookedEntity.schedule = {
       scheduleId: service.scheduleId,
     };
@@ -260,24 +311,25 @@ export async function createServiceBooking({ service, slot, contactDetails, numb
     const res = await client.bookings.createBooking(bookingPayload);
     const created = res.booking || res;
 
-    console.log(`[Wix Bookings] Booking successfully registered! ID: ${created._id}`);
+    console.log(`[Wix Bookings] Real Booking Confirmed! ID: ${created._id}`);
     return {
       success: true,
       bookingId: created._id,
       status: created.status || 'CONFIRMED',
       booking: created,
-      message: 'Booking successfully confirmed in Wix Bookings!',
+      message: 'Your booking has been successfully accepted and confirmed by Wix Bookings!',
     };
   } catch (apiErr) {
-    console.warn('[Wix Bookings] createBooking API note:', apiErr.message, apiErr.details || '');
-    // If backend reports an availability constraint or dashboard configuration restriction
+    console.error('[Wix Bookings] createBooking API failure:', apiErr.message, apiErr.details || '');
+    const errorCode = apiErr.details?.applicationError?.code || 'BOOKING_REJECTED';
+    const errorDesc = apiErr.details?.applicationError?.description || apiErr.message || 'Booking was not accepted by Wix Bookings.';
+    
+    // Return honest failure to frontend without generating fake BK references
     return {
-      success: true,
-      simulated: true,
-      bookingId: `BK-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      status: 'PENDING_CONFIRMATION',
-      message:
-        'Booking request successfully captured for this slot. (Note: Wix Studio calendar resource auto-confirmation can be enabled in Dashboard settings).',
+      success: false,
+      errorCode,
+      message: `Wix Bookings could not confirm this reservation: ${errorDesc}`,
     };
   }
 }
+

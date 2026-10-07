@@ -1,12 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calendar, 
   Search, 
   Clock, 
-  Sparkles
+  Sparkles,
+  ArrowDown
 } from 'lucide-react';
 import { BookingCard } from '../components/BookingCard';
-import { BookingModal } from '../components/BookingModal';
+import { BookingSection } from '../components/BookingSection';
 import { 
   LoadingSkeleton, 
   ErrorState 
@@ -21,6 +22,14 @@ export function BookingsPage({
   const [filterType, setFilterType] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedService, setSelectedService] = useState(null);
+
+  // Auto-select first appointment service if none selected initially
+  useEffect(() => {
+    if (!selectedService && services.length > 0) {
+      const defaultAppt = services.find((s) => s.type === 'APPOINTMENT') || services[0];
+      setSelectedService(defaultAppt);
+    }
+  }, [services, selectedService]);
 
   const filteredServices = useMemo(() => {
     let list = [...services];
@@ -42,6 +51,14 @@ export function BookingsPage({
     return list;
   }, [services, filterType, searchTerm]);
 
+  const handleSelectServiceAndScroll = (service) => {
+    setSelectedService(service);
+    const target = document.getElementById('booking-section');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   return (
     <div className="bookings-page" id="page-bookings">
       {/* Bookings Header Section */}
@@ -53,7 +70,7 @@ export function BookingsPage({
               Schedule an Advisory Session
             </h1>
             <p className="page-subtitle" style={{ maxWidth: '680px' }}>
-              Select an engagement model to view real-time availability. We offer dedicated architectural reviews, 
+              Select an engagement model to view real-time calendar availability. We offer dedicated architectural reviews, 
               hands-on workshops, and strategic consulting sessions.
             </p>
           </div>
@@ -61,7 +78,7 @@ export function BookingsPage({
       </section>
 
       {/* Main Catalog & Filter Section */}
-      <section className="catalog-section" style={{ paddingBottom: '5rem' }}>
+      <section className="catalog-section" style={{ paddingBottom: '3.5rem' }}>
         <div className="container">
           {/* Controls Bar: Type Filter & Search */}
           <div className="catalog-controls-bar" style={{ marginBottom: '2.5rem' }}>
@@ -132,25 +149,32 @@ export function BookingsPage({
             </div>
           ) : (
             <div className="bookings-grid">
-              {filteredServices.map((service) => (
-                <BookingCard
-                  key={service.id}
-                  service={service}
-                  onBook={setSelectedService}
-                />
-              ))}
+              {filteredServices.map((service) => {
+                const isSelected = selectedService?.id === service.id;
+                return (
+                  <div 
+                    key={service.id} 
+                    className={`booking-card-wrapper ${isSelected ? 'selected-card-ring' : ''}`}
+                    style={{ position: 'relative' }}
+                  >
+                    <BookingCard
+                      service={service}
+                      onBook={handleSelectServiceAndScroll}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       </section>
 
-      {/* Booking Scheduling Modal (Real Monthly Calendar + Wix Time Slots V2) */}
-      {selectedService && (
-        <BookingModal
-          service={selectedService}
-          onClose={() => setSelectedService(null)}
-        />
-      )}
+      {/* Dedicated Separate Date & Time Booking Section */}
+      <BookingSection
+        selectedService={selectedService}
+        onSelectService={setSelectedService}
+        services={services}
+      />
     </div>
   );
 }
