@@ -248,44 +248,66 @@ export async function createServiceBooking({ service, slot, contactDetails, numb
     throw new Error('Service information is required to create a booking.');
   }
 
-  const client = getWixClient();
-
   console.log(`[Wix Bookings] Initiating real booking for "${service.name}"...`);
 
-  // Construct bookedEntity depending on slot or schedule
+  // 1. Primary: Use secure serverless endpoint with elevated admin credentials
+  try {
+    const response = await fetch('/api/create-booking', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        service,
+        slot,
+        contactDetails,
+        numberOfParticipants,
+      }),
+    });
+
+    if (response.status !== 404) {
+      const result = await response.json();
+      if (response.ok && result.success) {
+        console.log(`[Wix Bookings] Real Booking Confirmed via Server! ID: ${result.bookingId}`);
+        return {
+          success: true,
+          bookingId: result.bookingId,
+          status: result.status || 'CONFIRMED',
+          booking: result.booking,
+          message: 'Your booking has been successfully accepted and confirmed by Wix Bookings!',
+        };
+      }
+
+      console.warn('[Wix Bookings] Serverless booking error:', result);
+      return {
+        success: false,
+        errorCode: result.errorCode || 'BOOKING_FAILED',
+        message: result.message || 'Wix Bookings could not confirm this reservation.',
+      };
+    }
+  } catch (netErr) {
+    console.warn('[Wix Bookings] Serverless booking request failed, attempting direct client fallback:', netErr.message);
+  }
+
+  // 2. Fallback: Client-side OAuthStrategy SDK (with correct OWNER_BUSINESS locationType)
+  const client = getWixClient();
   const bookedEntity = {};
 
   if (slot && slot.localStartDate) {
-    // 1. Verify resource availability immediately before booking
-    const verification = await getSlotVerification(service.id, slot.localStartDate, slot.localEndDate, slot.location);
-    const availableResources = verification?.timeSlot?.availableResources || [];
-    
     const slotPayload = {
       serviceId: service.id,
       scheduleId: slot.scheduleId || service.scheduleId,
-      location: { locationType: 'OWNER_BUSINESS' },
+      location: {
+        locationType: 'OWNER_BUSINESS',
+        id: slot.location?._id || slot.location?.id,
+        name: slot.location?.name,
+      },
       startDate: new Date(slot.localStartDate).toISOString(),
       endDate: new Date(slot.localEndDate).toISOString(),
     };
 
-    // If specific resources exist for this slot, bind them to avoid resource configuration conflicts
-    if (availableResources.length > 0 && availableResources[0]?.resources?.length > 0) {
-      const primaryRes = availableResources[0].resources[0];
-      slotPayload.resource = {
-        id: primaryRes._id,
-        name: primaryRes.name,
-      };
-      slotPayload.resourceSelections = [
-        {
-          resourceTypeId: availableResources[0].resourceTypeId,
-          selectionMethod: 'SPECIFIC_RESOURCE',
-        },
-      ];
-    }
-
     bookedEntity.slot = slotPayload;
   } else if (service.scheduleId) {
-    // Course or class service: bind by schedule directly
     bookedEntity.schedule = {
       scheduleId: service.scheduleId,
     };
@@ -304,14 +326,14 @@ export async function createServiceBooking({ service, slot, contactDetails, numb
       email: contactDetails.email,
       phone: contactDetails.phone || '',
     },
-    numberOfParticipants,
+    numberOfParticipants: Number(numberOfParticipants) || 1,
   };
 
   try {
     const res = await client.bookings.createBooking(bookingPayload);
     const created = res.booking || res;
 
-    console.log(`[Wix Bookings] Real Booking Confirmed! ID: ${created._id}`);
+    console.log(`[Wix Bookings] Real Booking Confirmed via Client SDK! ID: ${created._id}`);
     return {
       success: true,
       bookingId: created._id,
@@ -323,8 +345,7 @@ export async function createServiceBooking({ service, slot, contactDetails, numb
     console.error('[Wix Bookings] createBooking API failure:', apiErr.message, apiErr.details || '');
     const errorCode = apiErr.details?.applicationError?.code || 'BOOKING_REJECTED';
     const errorDesc = apiErr.details?.applicationError?.description || apiErr.message || 'Booking was not accepted by Wix Bookings.';
-    
-    // Return honest failure to frontend without generating fake BK references
+
     return {
       success: false,
       errorCode,
