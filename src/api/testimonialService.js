@@ -77,3 +77,27 @@ export async function fetchPublishedTestimonials() {
     rawResponse: queryResult,
   };
 }
+
+/**
+ * Submits a new client review to Wix CMS via secure server-side API.
+ * The Admin API key is stored and executed exclusively on the server.
+ * @param {{ name: string, role?: string, company?: string, rating: number, message: string, image?: string }} reviewData
+ * @returns {Promise<{ success: boolean, item?: any, message?: string }>}
+ */
+export async function submitTestimonialReview(reviewData) {
+  const response = await fetch('/api/submit-review', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(reviewData),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || data.message || 'Failed to submit review to Wix CMS.');
+  }
+
+  return data;
+}

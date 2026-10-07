@@ -136,13 +136,13 @@ export function Navbar({
           {/* Cart Drawer Trigger Button */}
           <button
             type="button"
-            className="btn btn-cart-trigger"
+            className="btn-cart-trigger"
             onClick={onOpenCart}
-            title="View Cart"
+            title="View Shopping Cart"
             id="nav-cart-btn"
             aria-label="View Shopping Cart"
           >
-            <ShoppingBag size={16} />
+            <ShoppingBag size={18} />
             <span className="cart-badge">{cartItemCount}</span>
           </button>
 

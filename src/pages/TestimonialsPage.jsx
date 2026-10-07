@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
-import { MessageSquareQuote, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageSquareQuote, AlertCircle, Plus, Star } from 'lucide-react';
 import { TestimonialCard } from '../components/TestimonialCard.jsx';
+import { WriteReviewModal } from '../components/WriteReviewModal.jsx';
 import { LoadingSkeleton } from '../components/StatusStates.jsx';
 
 export function TestimonialsPage({
@@ -10,6 +11,8 @@ export function TestimonialsPage({
   isConfigured = true,
   onRefresh,
 }) {
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+
   useEffect(() => {
     if (isConfigured && onRefresh) {
       onRefresh();
@@ -21,7 +24,7 @@ export function TestimonialsPage({
       <section className="posts-section" style={{ paddingTop: '3.5rem', paddingBottom: '5rem' }}>
         <div className="container">
           {/* Header */}
-          <div className="section-header" style={{ marginBottom: '2.5rem' }}>
+          <div className="section-header" style={{ marginBottom: '2.5rem', alignItems: 'flex-start' }}>
             <div>
               <span className="section-eyebrow">Client Proof &amp; Impact</span>
               <h1 className="page-title" style={{ marginTop: '0.4rem', marginBottom: '0.6rem' }}>
@@ -31,6 +34,17 @@ export function TestimonialsPage({
                 Verified testimonials and feedback from technology executives, engineering directors, and product teams.
               </p>
             </div>
+
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setIsReviewModalOpen(true)}
+              id="btn-open-review-modal"
+              style={{ whiteSpace: 'nowrap', marginTop: '0.5rem' }}
+            >
+              <Plus size={15} />
+              <span>Write a Review</span>
+            </button>
           </div>
 
           {/* Content States */}
@@ -56,8 +70,16 @@ export function TestimonialsPage({
               </div>
               <h3 className="state-title">No Endorsements Available</h3>
               <p className="state-description">
-                Check back shortly for newly published case studies and partner feedback.
+                Be the first partner to share your experience with Aura Studio.
               </p>
+              <button 
+                className="btn btn-primary btn-sm" 
+                onClick={() => setIsReviewModalOpen(true)}
+                style={{ marginTop: '0.75rem' }}
+              >
+                <Plus size={14} />
+                <span>Submit First Review</span>
+              </button>
             </div>
           ) : (
             <div className="testimonials-grid" id="testimonials-full-grid">
@@ -68,6 +90,13 @@ export function TestimonialsPage({
           )}
         </div>
       </section>
+
+      {/* Write a Review Modal */}
+      <WriteReviewModal
+        isOpen={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        onSuccess={onRefresh}
+      />
     </div>
   );
 }

@@ -34,11 +34,14 @@ if (typeof window !== 'undefined') {
   }
 }
 
+export const DEFAULT_WIX_CLIENT_ID = '1fe2dd83-1c28-450a-8f3a-9ee727449674';
+
 /**
  * Retrieve the current active Wix Client ID.
  * Priority:
  * 1. Runtime override from UI/localStorage (for instant testing without rebuild)
  * 2. Environment variable VITE_WIX_CLIENT_ID
+ * 3. Default production public OAuth Client ID
  */
 export function getWixClientId() {
   const envId =
@@ -57,7 +60,7 @@ export function getWixClientId() {
     return envId.trim();
   }
 
-  return '';
+  return DEFAULT_WIX_CLIENT_ID;
 }
 
 /**
